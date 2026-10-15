@@ -1,6 +1,7 @@
-"""Evaluate a trained checkpoint on the Celeb-DF test split.
+"""Evaluate a trained checkpoint on the test split of one or more datasets.
 
   python -m model.eval --data-dir data/faces --checkpoint-path model/checkpoints/best.pth
+  python -m model.eval --data-dir data/faces data/faces_ffpp   # both combined
 
 Reports (all written to reports/):
   - Frame-level and video-level AUC, accuracy, precision, recall, F1
@@ -142,7 +143,7 @@ def plot_roc(frame: tuple, video: tuple, path: Path) -> None:
     ax.plot([0, 1], [0, 1], "--", color="gray")
     ax.set_xlabel("False positive rate")
     ax.set_ylabel("True positive rate")
-    ax.set_title("ROC (Celeb-DF test)")
+    ax.set_title("ROC (test split)")
     ax.legend(loc="lower right")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
@@ -150,8 +151,8 @@ def plot_roc(frame: tuple, video: tuple, path: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate on the Celeb-DF test split.")
-    parser.add_argument("--data-dir", type=Path, nargs="+", default=[PROJECT_ROOT / "data" / "faces"], help="One or more dataset folders; several = train on them combined.")
+    parser = argparse.ArgumentParser(description="Evaluate a checkpoint on the test split of one or more datasets.")
+    parser.add_argument("--data-dir", type=Path, nargs="+", default=[PROJECT_ROOT / "data" / "faces"], help="One or more dataset folders; several = evaluate on them combined.")
     parser.add_argument("--checkpoint-path", type=Path, default=PROJECT_ROOT / "model" / "checkpoints" / "best.pth")
     parser.add_argument("--reports-dir", type=Path, default=PROJECT_ROOT / "reports")
     parser.add_argument("--batch-size", type=int, default=64)
