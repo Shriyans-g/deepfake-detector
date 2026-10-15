@@ -1,0 +1,194 @@
+# Deepfake Detector
+
+Detects face-swap deepfakes in images. Upload a photo with a face and get back:
+
+- a **calibrated probability** that the face is manipulated, with an explicit "uncertain" zone instead of a forced yes/no
+- a **Grad-CAM heatmap** showing which parts of the face drove the prediction
+
+**Stack:** PyTorch · OpenCV · FastAPI · Docker · Next.js · Modal · GitHub Actions
+
+> **Scope:** the model is trained on [Celeb-DF v2](https://github.com/yuezunli/celeb-deepfakeforensics) face swaps.
+> It detects swapped faces. It is not built to catch fully AI-generated images (Midjourney, Stable Diffusion) or general photo edits.
+
+<!-- Add a demo GIF here once it's deployed: ![demo](reports/demo.gif) -->
+
+## Results
+
+> Fill these in from `python -m model.eval` (it prints these tables). Don't publish numbers you haven't run.
+
+Evaluated on the official Celeb-DF v2 test list (518 videos, 178 real / 340 fake).
+
+| Level | AUC | Accuracy | Precision (fake) | Recall (fake) | F1 (fake) |
+|---|---|---|---|---|---|
+| Frame | TBD | TBD | TBD | TBD | TBD |
+| Video (mean over frames) | TBD | TBD | TBD | TBD | TBD |
+
+**Calibration:** expected calibration error goes from TBD (raw) to TBD after temperature scaling.
+
+**Robustness** (frame AUC under degradations the model may meet in the wild):
+
+| Condition | Frame AUC |
+|---|---|
+| Clean | TBD |
+| JPEG quality 50 | TBD |
+| JPEG quality 30 | TBD |
+| Downscaled 0.25x | TBD |
+| Blur (r = 1.5) | TBD |
+
+<!-- ![ROC](reports/roc_curve.png) ![Reliability](reports/reliability_diagram.png) -->
+
+## How it works
+
+```
+image ─► YuNet face detector ─► square crop (1.3x margin, 256px)
+      ─► ResNet50 / EfficientNet (fine-tuned, single "fake" logit)
+      ─► sigmoid(logit / T)  ← temperature T fit on validation set
+      ─► Grad-CAM on last conv block ─► heatmap overlay
+```
+
+### Data pipeline (`model/prepare_frames.py`)
+
+- **Splits by identity, not by frame.** Celeb-DF reuses the same 59 celebrities across videos. If frames from the same person end up in train and val, the model memorizes faces and validation looks better than it is. Val is every video involving a held-out set of identities. A fake that involves a held-out person, even as the swap source, goes to val.
+- **Official test list.** `List_of_testing_videos.txt` is used as the test set so numbers are comparable to published results. (Note: the official test set shares identities with training videos. That's the benchmark's protocol, not a leak introduced here.)
+- **Face crops, not full frames.** Training on full frames teaches the model about backgrounds and lighting. Cropping forces it to look at the face. The same `model/faces.py` code crops faces at training and inference time, so the model never sees a different kind of input in production.
+- 10 evenly spaced frames per video by default.
+
+### Training (`model/train.py`)
+
+- ImageNet-pretrained backbone, last layer replaced with one logit. BCE loss.
+- **Balanced sampling.** Celeb-DF has ~6x more fake than real videos, so a model that always says "fake" scores ~86% accuracy. A weighted sampler shows real and fake crops equally often, and AUC (not accuracy) is the selection metric.
+- **Robustness augmentations:** random JPEG re-compression, downscaling and blur on top of standard crops and flips, so the model doesn't depend on fine artifacts that compression destroys.
+- AdamW, one-cycle LR schedule, mixed precision on GPU, early stopping on validation AUC.
+
+### Calibration (`model/calibration.py`)
+
+Neural nets are usually overconfident: a raw "99%" can be right much less often than that. After training, one scalar temperature **T** is fit on the validation set by minimizing log loss of `sigmoid(logit / T)`. This changes how confident the model claims to be, never which class it picks. Reported as expected calibration error (ECE) plus a reliability diagram.
+
+### Explanations (`model/gradcam.py`)
+
+Grad-CAM, implemented from scratch with forward hooks: weight the last conv block's feature maps by the gradient of the output, sum them, ReLU, upsample. The heatmap shows evidence for whichever answer the model gave.
+
+### API (`app/`)
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | Liveness, and whether a model is loaded |
+| `GET /model-info` | Architecture, temperature, validation metrics |
+| `POST /predict` | Multipart image upload, returns the result below |
+
+```json
+{
+  "verdict": "likely_fake | uncertain | likely_real",
+  "prob_fake": 0.83,
+  "raw_prob_fake": 0.97,
+  "face_box": { "x": 480, "y": 112, "w": 83, "h": 116, "score": 0.94 },
+  "face_crop": "data:image/png;base64,...",
+  "heatmap": "data:image/png;base64,...",
+  "heatmap_explains": "fake",
+  "model": { "arch": "resnet50", "temperature": 1.8 },
+  "latency_ms": 412.0
+}
+```
+
+Errors: `415` wrong file type, `413` too large, `400` unreadable, `422` no face found, `503` no model loaded.
+
+## Running it
+
+### 1. Setup
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+### 2. Build the face-crop dataset (on your machine, ~15–30 min)
+
+```bash
+python -m model.prepare_frames --celeb-df-root ~/Documents/Celeb-DF-v2
+```
+
+Writes crops to `data/faces/{train,val,test}/{real,fake}/` and a `data/faces/manifest.csv`. Re-runnable: finished videos are skipped. Add `--limit-per-source 10` for a quick trial run.
+
+### 3. Train (GPU: use the Colab notebook)
+
+Training on a laptop CPU is too slow. Zip `data/faces`, upload it to Google Drive, and run [`notebooks/train_colab.ipynb`](notebooks/train_colab.ipynb) on a free T4 GPU. Or, on any machine with a GPU:
+
+```bash
+python -m model.train --data-dir data/faces --arch resnet50 --epochs 8 --batch-size 64
+python -m model.eval  --data-dir data/faces --checkpoint-path model/checkpoints/best.pth
+```
+
+Put the trained checkpoint at `model/checkpoints/best.pth`.
+
+### 4. Run the API and frontend
+
+```bash
+uvicorn app.main:app --reload                       # http://localhost:8000/docs
+cd frontend && cp .env.example .env.local && npm install && npm run dev   # http://localhost:3000
+```
+
+### 5. Tests
+
+```bash
+pytest -q
+```
+
+Tests build a small random-weight checkpoint, so they run without the real model or dataset. CI runs them, builds the Docker image, and builds the frontend on every push.
+
+## Deployment
+
+**Backend on Modal** (serverless, scales to zero, free when idle):
+
+```bash
+pip install modal && modal setup
+ALLOWED_ORIGINS=https://your-app.vercel.app modal deploy deploy/modal_app.py
+```
+
+**Or with Docker** (Render, Railway, Fly, anywhere):
+
+```bash
+docker build -t deepfake-detector .
+docker run -p 8000:8000 -v "$(pwd)/model/checkpoints:/app/model/checkpoints" deepfake-detector
+```
+
+The checkpoint isn't in git. Either mount it as above, or upload it as a GitHub Release asset and set `MODEL_URL` so the container downloads it on first start.
+
+**Frontend on Vercel:** import the repo, set the root directory to `frontend`, and set `NEXT_PUBLIC_API_URL` to the backend URL.
+
+## Configuration
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MODEL_CHECKPOINT` | `model/checkpoints/best.pth` | Checkpoint path |
+| `MODEL_URL` | (empty) | Download the checkpoint from here if missing |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS origins |
+| `DECISION_MARGIN` | `0.7` | P(fake) ≥ this is "likely fake", ≤ 1 − this is "likely real" |
+| `MAX_UPLOAD_SIZE_MB` | `10` | Upload limit |
+
+## Limitations
+
+- Trained on one dataset of one manipulation type (face swaps of celebrities in interview-style video). Expect worse performance on other deepfake methods, on fully synthetic images, and on very different demographics or settings.
+- Frames come from video, so single photos taken with modern phone cameras are somewhat out of distribution.
+- Only the largest face in an image is analyzed.
+- Grad-CAM shows where the model looked, not a proven artifact. Heatmaps for deepfake detectors are often diffuse.
+- This is a screening aid. It should never be the only evidence that an image is or isn't real.
+
+## Project layout
+
+```
+app/            FastAPI service (main.py, inference.py, schemas.py, config.py)
+model/          faces.py, prepare_frames.py, dataset.py, transforms.py, model_utils.py,
+                train.py, eval.py, calibration.py, gradcam.py, metrics.py
+model/weights/  YuNet face detector (230 KB, from OpenCV Zoo)
+frontend/       Next.js upload UI
+notebooks/      Colab training notebook
+deploy/         Modal deployment
+tests/          pytest suite
+reports/        metrics.json and plots written by train/eval
+```
+
+## Acknowledgements
+
+- Celeb-DF v2: Li et al., "Celeb-DF: A Large-scale Challenging Dataset for DeepFake Forensics", CVPR 2020. The dataset is for research use and is not redistributed here.
+- YuNet face detector from [OpenCV Zoo](https://github.com/opencv/opencv_zoo).
+- Grad-CAM: Selvaraju et al., ICCV 2017. Temperature scaling: Guo et al., "On Calibration of Modern Neural Networks", ICML 2017.

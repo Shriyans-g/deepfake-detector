@@ -1,0 +1,9 @@
+# Runtime dependencies for the API (what the Docker image installs).
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+torch>=2.3
+torchvision>=0.18
+opencv-python-headless>=4.8
+numpy>=1.26
+pillow>=10.0

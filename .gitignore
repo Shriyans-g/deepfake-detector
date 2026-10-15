@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv*/
+venv/
+
+# Data and model artifacts (too big for git; Celeb-DF can't be redistributed)
+data/
+model/checkpoints/*
+!model/checkpoints/.gitkeep
+*.pth
+*.pt
+*.zip
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env*.local
+frontend/next-env.d.ts
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.Rhistory

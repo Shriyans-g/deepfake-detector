@@ -1,0 +1,12 @@
+# Only app/ and model/ are copied, but keep the build context small too.
+.git
+.venv*
+venv
+data/
+reports/
+notebooks/
+frontend/
+tests/
+**/__pycache__
+*.py[cod]
+.DS_Store
