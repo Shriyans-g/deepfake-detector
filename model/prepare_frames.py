@@ -1,20 +1,27 @@
-"""Turn the Celeb-DF v2 videos into a dataset of face crops.
+"""Turn deepfake video datasets into datasets of face crops.
+
+Supports Celeb-DF v2 and FaceForensics++ (FF++).
 
 What this does:
   1. Splits videos into train / val / test.
-     - test = Celeb-DF's official List_of_testing_videos.txt (518 videos), so
+     Celeb-DF:
+     - test = the official List_of_testing_videos.txt (518 videos), so
        results are comparable to published numbers.
      - val  = every remaining video that involves a held-out set of celebrity
        IDs. No val identity ever appears in train, so val measures
        generalization to new people instead of memorized faces.
      - train = everything else.
+     FF++:
+     - the official split files (model/splits/ffpp_*.json, 720/140/140 source
+       videos). A fake "A_B" goes in the same split as originals A and B.
   2. Samples N evenly spaced frames per video.
   3. Detects the face in each frame and saves a 256x256 crop.
-  4. Writes data/faces/manifest.csv (path, label, split, video_id) which the
-     training and eval code read.
+  4. Writes <output-dir>/manifest.csv (path, label, split, video_id, source)
+     which the training and eval code read.
 
 Usage:
   python -m model.prepare_frames --celeb-df-root ~/Documents/Celeb-DF-v2
+  python -m model.prepare_frames --ffpp-root ~/Documents/FaceForensics   # -> data/faces_ffpp
 
 Quick test on a handful of videos:
   python -m model.prepare_frames --celeb-df-root ... --limit-per-source 5
@@ -26,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import random
 import re
@@ -40,6 +48,9 @@ from model.faces import FaceDetector, crop_face
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "faces"
+DEFAULT_FFPP_OUTPUT_DIR = PROJECT_ROOT / "data" / "faces_ffpp"
+FFPP_SPLITS_DIR = Path(__file__).resolve().parent / "splits"
+FFPP_METHODS = ("Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures")
 
 # Celeb-DF folder name -> label. 1 = fake, 0 = real (matches the model output).
 SOURCES = {"Celeb-real": 0, "YouTube-real": 0, "Celeb-synthesis": 1}
@@ -127,6 +138,53 @@ def assign_splits(
     return jobs
 
 
+def assign_splits_ffpp(
+    root: Path,
+    compression: str = "c23",
+    methods: tuple[str, ...] = FFPP_METHODS,
+    limit_per_source: int | None = None,
+) -> list[VideoJob]:
+    """Assign FF++ videos to splits using the official split files.
+
+    Layout (from the official download script):
+      original_sequences/youtube/<c>/videos/000.mp4             (real)
+      manipulated_sequences/<Method>/<c>/videos/000_003.mp4     (fake: target 000, source 003)
+
+    Each split file lists pairs of source video IDs. Originals in a pair, and
+    both fakes made from that pair (A_B and B_A), go into that split, so no
+    person appears in more than one split.
+    """
+
+    split_of: dict[str, str] = {}
+    for split in ("train", "val", "test"):
+        pairs = json.loads((FFPP_SPLITS_DIR / f"ffpp_{split}.json").read_text())
+        for a, b in pairs:
+            split_of[a] = split_of[b] = split
+            split_of[f"{a}_{b}"] = split_of[f"{b}_{a}"] = split
+
+    folders = {"FFpp-original": (root / "original_sequences" / "youtube" / compression / "videos", 0)}
+    for method in methods:
+        folders[f"FFpp-{method}"] = (root / "manipulated_sequences" / method / compression / "videos", 1)
+
+    jobs: list[VideoJob] = []
+    for source, (folder, label) in folders.items():
+        if not folder.exists():
+            print(f"  warning: {folder} not found, skipping {source}")
+            continue
+        videos = sorted(folder.glob("*.mp4"))
+        if limit_per_source:
+            videos = videos[:limit_per_source]
+        for video in videos:
+            split = split_of.get(video.stem)
+            if split is None:
+                print(f"  warning: {video.name} is not in the official splits, skipping")
+                continue
+            jobs.append(VideoJob(video, source, label, split))
+    if not jobs:
+        raise FileNotFoundError(f"No FF++ videos found under {root} for compression '{compression}'.")
+    return jobs
+
+
 def sample_frame_indices(total_frames: int, n: int) -> list[int]:
     """n evenly spaced frame indices, skipping the very start and end."""
 
@@ -196,9 +254,13 @@ def _row(path: Path, job: VideoJob, output_dir: Path) -> dict:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the face-crop dataset from Celeb-DF v2.")
-    parser.add_argument("--celeb-df-root", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser = argparse.ArgumentParser(description="Build a face-crop dataset from Celeb-DF v2 or FaceForensics++.")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--celeb-df-root", type=Path)
+    source.add_argument("--ffpp-root", type=Path)
+    parser.add_argument("--output-dir", type=Path, default=None, help="Default: data/faces (Celeb-DF) or data/faces_ffpp (FF++).")
+    parser.add_argument("--ffpp-compression", choices=["raw", "c23", "c40"], default="c23")
+    parser.add_argument("--ffpp-methods", nargs="+", default=list(FFPP_METHODS))
     parser.add_argument("--frames-per-video", type=int, default=10)
     parser.add_argument("--jpeg-quality", type=int, default=95)
     parser.add_argument("--val-identity-fraction", type=float, default=0.1)
@@ -211,16 +273,23 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    root = args.celeb_df_root.expanduser()
-    output_dir = args.output_dir.expanduser()
+    if args.ffpp_root:
+        output_dir = (args.output_dir or DEFAULT_FFPP_OUTPUT_DIR).expanduser()
+        jobs = assign_splits_ffpp(
+            args.ffpp_root.expanduser(),
+            compression=args.ffpp_compression,
+            methods=tuple(args.ffpp_methods),
+            limit_per_source=args.limit_per_source,
+        )
+    else:
+        output_dir = (args.output_dir or DEFAULT_OUTPUT_DIR).expanduser()
+        jobs = assign_splits(
+            args.celeb_df_root.expanduser(),
+            val_identity_fraction=args.val_identity_fraction,
+            seed=args.seed,
+            limit_per_source=args.limit_per_source,
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    jobs = assign_splits(
-        root,
-        val_identity_fraction=args.val_identity_fraction,
-        seed=args.seed,
-        limit_per_source=args.limit_per_source,
-    )
     counts: dict[tuple[str, int], int] = {}
     for job in jobs:
         counts[(job.split, job.label)] = counts.get((job.split, job.label), 0) + 1
@@ -232,7 +301,7 @@ def main() -> None:
     # scan, instead of globbing a folder of tens of thousands of files per video.
     existing: dict[str, list[Path]] = {}
     for path in output_dir.glob("*/*/*.jpg"):
-        existing.setdefault(path.name.split("__f")[0], []).append(path)
+        existing.setdefault(path.name.rsplit("__f", 1)[0], []).append(path)
     rows = [_row(p, job, output_dir) for job in jobs for p in sorted(existing.get(job.video_id, []))]
     jobs = [job for job in jobs if job.video_id not in existing]
     if existing:

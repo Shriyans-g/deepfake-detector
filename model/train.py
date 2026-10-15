@@ -34,7 +34,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the deepfake face classifier.")
-    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data" / "faces")
+    parser.add_argument("--data-dir", type=Path, nargs="+", default=[PROJECT_ROOT / "data" / "faces"], help="One or more dataset folders; several = train on them combined.")
     parser.add_argument("--arch", choices=SUPPORTED_ARCHS, default="resnet50")
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=32)

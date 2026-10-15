@@ -52,3 +52,40 @@ def test_frame_sampling():
     assert all(0 < i < 299 for i in sample_frame_indices(300, 10))
     assert sample_frame_indices(0, 10) == []
     assert len(sample_frame_indices(3, 10)) >= 1
+
+
+def make_fake_ffpp(root: Path) -> None:
+    import json
+
+    from model.prepare_frames import FFPP_SPLITS_DIR
+
+    for split in ("train", "val", "test"):
+        for a, b in json.loads((FFPP_SPLITS_DIR / f"ffpp_{split}.json").read_text())[:3]:
+            real_dir = root / "original_sequences" / "youtube" / "c23" / "videos"
+            real_dir.mkdir(parents=True, exist_ok=True)
+            (real_dir / f"{a}.mp4").touch()
+            (real_dir / f"{b}.mp4").touch()
+            for method in ("Deepfakes", "NeuralTextures"):
+                fake_dir = root / "manipulated_sequences" / method / "c23" / "videos"
+                fake_dir.mkdir(parents=True, exist_ok=True)
+                (fake_dir / f"{a}_{b}.mp4").touch()
+                (fake_dir / f"{b}_{a}.mp4").touch()
+
+
+def test_ffpp_uses_official_splits_without_identity_overlap(tmp_path):
+    from model.prepare_frames import assign_splits_ffpp
+
+    make_fake_ffpp(tmp_path)
+    jobs = assign_splits_ffpp(tmp_path, methods=("Deepfakes", "NeuralTextures"))
+    assert {j.split for j in jobs} == {"train", "val", "test"}
+
+    ids_by_split: dict[str, set[str]] = {}
+    for job in jobs:
+        ids_by_split.setdefault(job.split, set()).update(job.path.stem.split("_"))
+    assert not (ids_by_split["train"] & ids_by_split["test"])
+    assert not (ids_by_split["train"] & ids_by_split["val"])
+
+    # Each pair gives 2 originals + 2 fakes per method.
+    test_jobs = [j for j in jobs if j.split == "test"]
+    assert sum(j.label == 0 for j in test_jobs) == 6
+    assert sum(j.label == 1 for j in test_jobs) == 12

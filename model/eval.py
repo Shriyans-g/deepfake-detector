@@ -98,6 +98,35 @@ def classification_metrics(probs: np.ndarray, labels: np.ndarray) -> dict:
     }
 
 
+def dataset_of(source: str) -> str:
+    return "FF++" if source.startswith("FFpp-") else "Celeb-DF"
+
+
+def breakdowns(probs: np.ndarray, labels: np.ndarray, video_ids: list[str], sources: list[str]) -> dict:
+    """AUC per dataset, and per manipulation method (each fake source vs. that dataset's reals).
+
+    The per-method numbers show which kinds of fakes the model finds easy or
+    hard, e.g. FF++ NeuralTextures is usually much harder than FaceSwap.
+    """
+
+    sources_arr = np.array(sources)
+    datasets = np.array([dataset_of(s) for s in sources])
+    out: dict = {"by_dataset": {}, "by_method": {}}
+
+    def scores(mask: np.ndarray) -> dict:
+        vids = [v for v, m in zip(video_ids, mask) if m]
+        vp, vl = video_level(probs[mask], labels[mask], vids)
+        return {"frame_auc": safe_auc(labels[mask], probs[mask]), "video_auc": safe_auc(vl, vp), "n_frames": int(mask.sum())}
+
+    for ds in sorted(set(datasets)):
+        out["by_dataset"][ds] = scores(datasets == ds)
+    for src in sorted({s for s, y in zip(sources, labels) if y == 1}):
+        ds = dataset_of(src)
+        mask = (datasets == ds) & ((labels == 0) | (sources_arr == src))
+        out["by_method"][src] = scores(mask)
+    return out
+
+
 def plot_roc(frame: tuple, video: tuple, path: Path) -> None:
     import matplotlib
 
@@ -122,7 +151,7 @@ def plot_roc(frame: tuple, video: tuple, path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate on the Celeb-DF test split.")
-    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data" / "faces")
+    parser.add_argument("--data-dir", type=Path, nargs="+", default=[PROJECT_ROOT / "data" / "faces"], help="One or more dataset folders; several = train on them combined.")
     parser.add_argument("--checkpoint-path", type=Path, default=PROJECT_ROOT / "model" / "checkpoints" / "best.pth")
     parser.add_argument("--reports-dir", type=Path, default=PROJECT_ROOT / "reports")
     parser.add_argument("--batch-size", type=int, default=64)
@@ -145,6 +174,7 @@ def main() -> None:
     raw_probs = sigmoid(logits)
     probs = sigmoid(logits / temperature)
     video_probs, video_labels = video_level(probs, labels, video_ids)
+    sources = loader.dataset.sources  # loader is unshuffled, so order matches
 
     results = {
         "checkpoint": str(args.checkpoint_path),
@@ -152,6 +182,7 @@ def main() -> None:
         "temperature": temperature,
         "frame": classification_metrics(probs, labels),
         "video": classification_metrics(video_probs, video_labels),
+        "breakdown": breakdowns(probs, labels, video_ids, sources),
         "calibration": {
             "ece_raw": expected_calibration_error(raw_probs, labels),
             "ece_temperature_scaled": expected_calibration_error(probs, labels),
@@ -189,6 +220,11 @@ def main() -> None:
         print("\n| Condition | Frame AUC |\n|---|---|")
         for name, auc in results["robustness_frame_auc"].items():
             print(f"| {name} | {auc:.3f} |")
+    b = results["breakdown"]
+    if len(b["by_dataset"]) > 1 or len(b["by_method"]) > 1:
+        print("\n| Subset | Frame AUC | Video AUC |\n|---|---|---|")
+        for name, m in list(b["by_dataset"].items()) + list(b["by_method"].items()):
+            print(f"| {name} | {m['frame_auc']:.3f} | {m['video_auc']:.3f} |")
     print(f"\nSaved metrics and plots to {args.reports_dir}/")
 
 

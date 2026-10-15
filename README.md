@@ -1,14 +1,14 @@
 # Deepfake Detector
 
-Detects face-swap deepfakes in images. Upload a photo with a face and get back:
+Detects deepfake face manipulations in images. Upload a photo with a face and get back:
 
 - a **calibrated probability** that the face is manipulated, with an explicit "uncertain" zone instead of a forced yes/no
 - a **Grad-CAM heatmap** showing which parts of the face drove the prediction
 
 **Stack:** PyTorch · OpenCV · FastAPI · Docker · Next.js · Modal · GitHub Actions
 
-> **Scope:** the model is trained on [Celeb-DF v2](https://github.com/yuezunli/celeb-deepfakeforensics) face swaps.
-> It detects swapped faces. It is not built to catch fully AI-generated images (Midjourney, Stable Diffusion) or general photo edits.
+> **Scope:** trained on [FaceForensics++](https://github.com/ondyari/FaceForensics) and [Celeb-DF v2](https://github.com/yuezunli/celeb-deepfakeforensics) face manipulations.
+> It detects manipulated faces. It is not built to catch fully AI-generated images (Midjourney, Stable Diffusion) or general photo edits.
 
 <!-- Add a demo GIF here once it's deployed: ![demo](reports/demo.gif) -->
 
@@ -16,12 +16,35 @@ Detects face-swap deepfakes in images. Upload a photo with a face and get back:
 
 > Fill these in from `python -m model.eval` (it prints these tables). Don't publish numbers you haven't run.
 
-Evaluated on the official Celeb-DF v2 test list (518 videos, 178 real / 340 fake).
+Three experiments, all evaluated on the datasets' official test splits (Celeb-DF: 518 videos; FF++: 140 source videos × 5 = 700 videos).
+
+### Generalization: does a detector work on data it wasn't trained on?
+
+Video-level AUC (frame scores averaged per video):
+
+| Trained on ↓ / Tested on → | FF++ (c23) | Celeb-DF v2 |
+|---|---|---|
+| A: Celeb-DF only | TBD | TBD |
+| B: FF++ only | TBD | **TBD** (unseen dataset) |
+| C: FF++ + Celeb-DF (deployed) | TBD | TBD |
+
+The B → Celeb-DF cell is the cross-dataset result: a model trained on one dataset tested on a different one, the main open problem in deepfake detection.
+
+### Per manipulation method (model B, FF++ test split)
+
+| Method | Frame AUC | Video AUC |
+|---|---|---|
+| Deepfakes | TBD | TBD |
+| Face2Face | TBD | TBD |
+| FaceSwap | TBD | TBD |
+| NeuralTextures | TBD | TBD |
+
+### Deployed model (C)
 
 | Level | AUC | Accuracy | Precision (fake) | Recall (fake) | F1 (fake) |
 |---|---|---|---|---|---|
 | Frame | TBD | TBD | TBD | TBD | TBD |
-| Video (mean over frames) | TBD | TBD | TBD | TBD | TBD |
+| Video | TBD | TBD | TBD | TBD | TBD |
 
 **Calibration:** expected calibration error goes from TBD (raw) to TBD after temperature scaling.
 
@@ -35,7 +58,7 @@ Evaluated on the official Celeb-DF v2 test list (518 videos, 178 real / 340 fake
 | Downscaled 0.25x | TBD |
 | Blur (r = 1.5) | TBD |
 
-<!-- ![ROC](reports/roc_curve.png) ![Reliability](reports/reliability_diagram.png) -->
+<!-- ![ROC](reports/C_combined/roc_curve.png) ![Reliability](reports/C_combined/reliability_diagram.png) -->
 
 ## How it works
 
@@ -49,7 +72,8 @@ image ─► YuNet face detector ─► square crop (1.3x margin, 256px)
 ### Data pipeline (`model/prepare_frames.py`)
 
 - **Splits by identity, not by frame.** Celeb-DF reuses the same 59 celebrities across videos. If frames from the same person end up in train and val, the model memorizes faces and validation looks better than it is. Val is every video involving a held-out set of identities. A fake that involves a held-out person, even as the swap source, goes to val.
-- **Official test list.** `List_of_testing_videos.txt` is used as the test set so numbers are comparable to published results. (Note: the official test set shares identities with training videos. That's the benchmark's protocol, not a leak introduced here.)
+- **Official test list.** `List_of_testing_videos.txt` is used as the Celeb-DF test set so numbers are comparable to published results. (Note: the official test set shares identities with training videos. That's the benchmark's protocol, not a leak introduced here.)
+- **FF++ uses its official split files** (`model/splits/`, 720/140/140 source videos). A fake made from videos A and B goes in the same split as A and B, so no person crosses splits. All four manipulation methods (Deepfakes, Face2Face, FaceSwap, NeuralTextures) at c23 compression.
 - **Face crops, not full frames.** Training on full frames teaches the model about backgrounds and lighting. Cropping forces it to look at the face. The same `model/faces.py` code crops faces at training and inference time, so the model never sees a different kind of input in production.
 - 10 evenly spaced frames per video by default.
 
@@ -101,22 +125,28 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-### 2. Build the face-crop dataset (on your machine, ~15–30 min)
+### 2. Build the face-crop datasets (on your machine, ~15–30 min each)
 
 ```bash
-python -m model.prepare_frames --celeb-df-root ~/Documents/Celeb-DF-v2
+python -m model.prepare_frames --celeb-df-root ~/Documents/Celeb-DF-v2   # -> data/faces
+python -m model.prepare_frames --ffpp-root ~/Documents/FaceForensics     # -> data/faces_ffpp
 ```
 
-Writes crops to `data/faces/{train,val,test}/{real,fake}/` and a `data/faces/manifest.csv`. Re-runnable: finished videos are skipped. Add `--limit-per-source 10` for a quick trial run.
+FF++ is downloaded with the official script (request access from the FF++ authors first):
+`python download_faceforensics.py ~/Documents/FaceForensics -d <original|Deepfakes|Face2Face|FaceSwap|NeuralTextures> -c c23 -t videos --server EU2`
+
+Each writes crops to `<dir>/{train,val,test}/{real,fake}/` and a `<dir>/manifest.csv`. Re-runnable: finished videos are skipped. Add `--limit-per-source 10` for a quick trial run.
 
 ### 3. Train (GPU: use the Colab notebook)
 
 Training on a laptop CPU is too slow. Zip `data/faces`, upload it to Google Drive, and run [`notebooks/train_colab.ipynb`](notebooks/train_colab.ipynb) on a free T4 GPU. Or, on any machine with a GPU:
 
 ```bash
-python -m model.train --data-dir data/faces --arch resnet50 --epochs 8 --batch-size 64
-python -m model.eval  --data-dir data/faces --checkpoint-path model/checkpoints/best.pth
+python -m model.train --data-dir data/faces data/faces_ffpp --arch resnet50 --epochs 6 --batch-size 64
+python -m model.eval  --data-dir data/faces data/faces_ffpp --checkpoint-path model/checkpoints/best.pth
 ```
+
+`--data-dir` takes one or more dataset folders. Several folders means train (or evaluate) on them combined, and eval then also prints AUC per dataset and per manipulation method.
 
 Put the trained checkpoint at `model/checkpoints/best.pth`.
 
@@ -167,7 +197,7 @@ The checkpoint isn't in git. Either mount it as above, or upload it as a GitHub 
 
 ## Limitations
 
-- Trained on one dataset of one manipulation type (face swaps of celebrities in interview-style video). Expect worse performance on other deepfake methods, on fully synthetic images, and on very different demographics or settings.
+- Trained on two academic datasets of face manipulations in video. Expect worse performance on newer deepfake methods, on fully synthetic images, and on very different demographics or settings (the cross-dataset table shows how big that drop can be).
 - Frames come from video, so single photos taken with modern phone cameras are somewhat out of distribution.
 - Only the largest face in an image is analyzed.
 - Grad-CAM shows where the model looked, not a proven artifact. Heatmaps for deepfake detectors are often diffuse.
@@ -180,6 +210,7 @@ app/            FastAPI service (main.py, inference.py, schemas.py, config.py)
 model/          faces.py, prepare_frames.py, dataset.py, transforms.py, model_utils.py,
                 train.py, eval.py, calibration.py, gradcam.py, metrics.py
 model/weights/  YuNet face detector (230 KB, from OpenCV Zoo)
+model/splits/   Official FF++ train/val/test split files
 frontend/       Next.js upload UI
 notebooks/      Colab training notebook
 deploy/         Modal deployment
@@ -189,6 +220,8 @@ reports/        metrics.json and plots written by train/eval
 
 ## Acknowledgements
 
-- Celeb-DF v2: Li et al., "Celeb-DF: A Large-scale Challenging Dataset for DeepFake Forensics", CVPR 2020. The dataset is for research use and is not redistributed here.
+- Celeb-DF v2: Li et al., "Celeb-DF: A Large-scale Challenging Dataset for DeepFake Forensics", CVPR 2020.
+- FaceForensics++: Rössler et al., "FaceForensics++: Learning to Detect Manipulated Facial Images", ICCV 2019.
+- Both datasets are for research use and are not redistributed here.
 - YuNet face detector from [OpenCV Zoo](https://github.com/opencv/opencv_zoo).
 - Grad-CAM: Selvaraju et al., ICCV 2017. Temperature scaling: Guo et al., "On Calibration of Modern Neural Networks", ICML 2017.
