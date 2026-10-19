@@ -14,51 +14,62 @@ Detects deepfake face manipulations in images. Upload a photo with a face and ge
 
 ## Results
 
-> Fill these in from `python -m model.eval` (it prints these tables). Don't publish numbers you haven't run.
-
-Three experiments, all evaluated on the datasets' official test splits (Celeb-DF: 518 videos; FF++: 140 source videos × 5 = 700 videos).
+All numbers are on the datasets' official test splits (Celeb-DF v2: 518 videos; FF++ c23: 140 source videos x 5 = 700 videos). ResNet50, 6 epochs, trained on a Colab T4. Raw numbers are in `reports/*/metrics.json`.
 
 ### Generalization: does a detector work on data it wasn't trained on?
 
-Video-level AUC (frame scores averaged per video):
+Video-level AUC (frame scores averaged per video). Italic cells are cross-dataset: the model never saw that dataset.
 
 | Trained on ↓ / Tested on → | FF++ (c23) | Celeb-DF v2 |
 |---|---|---|
-| A: Celeb-DF only | TBD | TBD |
-| B: FF++ only | TBD | **TBD** (unseen dataset) |
-| C: FF++ + Celeb-DF (deployed) | TBD | TBD |
+| A: Celeb-DF only | *0.633* | 0.9995 |
+| B: FF++ only | 0.987 | ***0.852*** |
+| C: FF++ + Celeb-DF (deployed) | 0.983 | 0.9995 |
 
-The B → Celeb-DF cell is the cross-dataset result: a model trained on one dataset tested on a different one, the main open problem in deepfake detection.
+**Key findings**
 
-### Per manipulation method (model B, FF++ test split)
+- **Near-perfect in-dataset scores hide a generalization gap.** Model A scores 0.9995 on Celeb-DF but only 0.633 on FF++, barely better than chance. Model B drops from 0.987 on FF++ to 0.852 on unseen Celeb-DF.
+- **The gap is asymmetric, and training diversity explains it.** FF++ contains four different manipulation methods (two face swaps, two expression reenactments); Celeb-DF has one. The model trained on the more varied data (B) transfers far better (0.852) than the one trained on a single method (A, 0.633).
+- **Model A fails confidently, not randomly.** On FF++ it calls 92% of fake videos real, and its calibration error is 0.69 (vs 0.007 in-dataset). It scores *below chance* on FaceSwap (0.457 AUC). Temperature scaling fit on in-distribution data does not fix confidence under distribution shift.
+- **Training on both datasets costs almost nothing.** Model C matches A on Celeb-DF (0.9995) and is within 0.004 of B on FF++.
 
-| Method | Frame AUC | Video AUC |
-|---|---|---|
-| Deepfakes | TBD | TBD |
-| Face2Face | TBD | TBD |
-| FaceSwap | TBD | TBD |
-| NeuralTextures | TBD | TBD |
+### Per manipulation method (FF++ test split)
 
-### Deployed model (C)
+| Method | Type | A (trained on Celeb-DF) | B (trained on FF++) | C (deployed) |
+|---|---|---|---|---|
+| Deepfakes | face swap | 0.822 | 0.996 | 0.994 |
+| FaceSwap | face swap | 0.457 | 0.994 | 0.993 |
+| Face2Face | reenactment | 0.657 | 0.990 | 0.985 |
+| NeuralTextures | reenactment | 0.595 | 0.970 | 0.960 |
+
+Video-level AUC. NeuralTextures is the hardest method for the models trained on FF++ (B and C), consistent with the FF++ paper; it changes only the mouth region and leaves few visible artifacts. Model A, which never saw FF++, struggles most with FaceSwap.
+
+### Deployed model (C), both test sets combined
 
 | Level | AUC | Accuracy | Precision (fake) | Recall (fake) | F1 (fake) |
 |---|---|---|---|---|---|
-| Frame | TBD | TBD | TBD | TBD | TBD |
-| Video | TBD | TBD | TBD | TBD | TBD |
+| Frame | 0.979 | 0.938 | 0.965 | 0.951 | 0.958 |
+| Video | 0.990 | 0.961 | 0.978 | 0.970 | 0.974 |
 
-**Calibration:** expected calibration error goes from TBD (raw) to TBD after temperature scaling.
+**Calibration:** expected calibration error drops from 0.039 (raw) to 0.009 after temperature scaling (T = 1.93).
 
 **Robustness** (frame AUC under degradations the model may meet in the wild):
 
-| Condition | Frame AUC |
-|---|---|
-| Clean | TBD |
-| JPEG quality 50 | TBD |
-| JPEG quality 30 | TBD |
-| Downscaled 0.25x | TBD |
-| Blur (r = 1.5) | TBD |
+| Condition | A (Celeb-DF test) | C (both test sets) |
+|---|---|---|
+| Clean | 0.996 | 0.979 |
+| JPEG quality 70 | 0.995 | 0.973 |
+| JPEG quality 50 | 0.994 | 0.964 |
+| JPEG quality 30 | 0.989 | 0.946 |
+| Downscaled 0.5x | 0.995 | 0.963 |
+| Downscaled 0.25x | 0.980 | 0.913 |
+| Blur (r = 1.5) | 0.994 | 0.962 |
 
-<!-- ![ROC](reports/C_combined/roc_curve.png) ![Reliability](reports/C_combined/reliability_diagram.png) -->
+Heavy downscaling is the most damaging degradation: small faces lose the fine detail detectors rely on.
+
+| ROC (deployed model) | Calibration (deployed model) |
+|---|---|
+| ![ROC](reports/C_combined/roc_curve.png) | ![Reliability](reports/C_combined/reliability_diagram.png) |
 
 ## How it works
 

@@ -1,0 +1,70 @@
+{
+  "checkpoint": "/content/drive/MyDrive/deepfake/checkpoints/A_celebdf.pth",
+  "arch": "resnet50",
+  "temperature": 1.5521428479186605,
+  "frame": {
+    "auc": 0.9962102610707204,
+    "accuracy": 0.9774131274131274,
+    "precision_fake": 0.9715598965814422,
+    "recall_fake": 0.9947058823529412,
+    "f1_fake": 0.9829966574625781,
+    "confusion_matrix": [
+      [
+        1681,
+        99
+      ],
+      [
+        18,
+        3382
+      ]
+    ],
+    "n": 5180
+  },
+  "video": {
+    "auc": 0.9995208195637806,
+    "accuracy": 0.9903474903474904,
+    "precision_fake": 0.9855072463768116,
+    "recall_fake": 1.0,
+    "f1_fake": 0.9927007299270073,
+    "confusion_matrix": [
+      [
+        173,
+        5
+      ],
+      [
+        0,
+        340
+      ]
+    ],
+    "n": 518
+  },
+  "breakdown": {
+    "by_dataset": {
+      "Celeb-DF": {
+        "frame_auc": 0.9962102610707204,
+        "video_auc": 0.9995208195637806,
+        "n_frames": 5180
+      }
+    },
+    "by_method": {
+      "Celeb-synthesis": {
+        "frame_auc": 0.9962102610707204,
+        "video_auc": 0.9995208195637806,
+        "n_frames": 5180
+      }
+    }
+  },
+  "calibration": {
+    "ece_raw": 0.013591533349540854,
+    "ece_temperature_scaled": 0.007137077997875595
+  },
+  "robustness_frame_auc": {
+    "clean": 0.9962102610707204,
+    "jpeg_q70": 0.9950675809649703,
+    "jpeg_q50": 0.9936951421017844,
+    "jpeg_q30": 0.9893175809649702,
+    "downscale_0.5x": 0.994630204890945,
+    "downscale_0.25x": 0.98041424322538,
+    "blur_r1.5": 0.9937024124256444
+  }
+}

@@ -52,7 +52,7 @@ Checkpoints go in `model/checkpoints/best.pth` (gitignored). Celeb-DF frames mus
 - [x] Code for data pipeline, training, eval, calibration, Grad-CAM, API, tests, Docker, CI, frontend, Modal deploy
 - [x] Run `prepare_frames` on the full Celeb-DF dataset (65,277 crops from 6,529 videos; zipped at data/faces.zip)
 - [x] Repo pushed to GitHub (Shriyans-g/deepfake-detector)
-- [ ] Download FF++ c23 (original + 4 methods) to ~/Documents/FaceForensics, run prepare_frames --ffpp-root, zip data/faces_ffpp
-- [ ] Run experiments A, B, C on Colab (notebook); fill the README results tables with real numbers
-- [ ] Ship checkpoint C as model/checkpoints/best.pth
-- [ ] Deploy backend (Modal) and frontend (Vercel); add demo GIF to README
+- [x] FF++ c23 downloaded to ~/Documents/FaceForensics; prepare_frames --ffpp-root done (49,999 crops from 5,000 videos; zipped at data/faces_ffpp.zip)
+- [x] Ran experiments A, B, C on Colab; results in reports/*/metrics.json; README results filled in
+- [x] Checkpoint C is at model/checkpoints/best.pth (gitignored; ~94MB)
+- [ ] Deploy backend (Docker on Google Cloud Run, using MODEL_URL from a GitHub Release) and frontend (Vercel); add demo GIF to README

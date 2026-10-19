@@ -1,0 +1,85 @@
+{
+  "checkpoint": "/content/drive/MyDrive/deepfake/checkpoints/B_ffpp.pth",
+  "arch": "resnet50",
+  "temperature": 2.2449649524695925,
+  "frame": {
+    "auc": 0.9750539540816328,
+    "accuracy": 0.9322857142857143,
+    "precision_fake": 0.9624684229520029,
+    "recall_fake": 0.9525,
+    "f1_fake": 0.9574582660204631,
+    "confusion_matrix": [
+      [
+        1192,
+        208
+      ],
+      [
+        266,
+        5334
+      ]
+    ],
+    "n": 7000
+  },
+  "video": {
+    "auc": 0.9873596938775511,
+    "accuracy": 0.9628571428571429,
+    "precision_fake": 0.9802158273381295,
+    "recall_fake": 0.9732142857142857,
+    "f1_fake": 0.9767025089605734,
+    "confusion_matrix": [
+      [
+        129,
+        11
+      ],
+      [
+        15,
+        545
+      ]
+    ],
+    "n": 700
+  },
+  "breakdown": {
+    "by_dataset": {
+      "FF++": {
+        "frame_auc": 0.9750539540816328,
+        "video_auc": 0.9873596938775511,
+        "n_frames": 7000
+      }
+    },
+    "by_method": {
+      "FFpp-Deepfakes": {
+        "frame_auc": 0.9840285714285715,
+        "video_auc": 0.9958163265306124,
+        "n_frames": 2800
+      },
+      "FFpp-Face2Face": {
+        "frame_auc": 0.9801734693877551,
+        "video_auc": 0.9897448979591837,
+        "n_frames": 2800
+      },
+      "FFpp-FaceSwap": {
+        "frame_auc": 0.9861658163265307,
+        "video_auc": 0.9937755102040816,
+        "n_frames": 2800
+      },
+      "FFpp-NeuralTextures": {
+        "frame_auc": 0.9498479591836735,
+        "video_auc": 0.9701020408163266,
+        "n_frames": 2800
+      }
+    }
+  },
+  "calibration": {
+    "ece_raw": 0.037485557921184035,
+    "ece_temperature_scaled": 0.012656229511302514
+  },
+  "robustness_frame_auc": {
+    "clean": 0.9750539540816328,
+    "jpeg_q70": 0.9614186224489796,
+    "jpeg_q50": 0.9503209183673471,
+    "jpeg_q30": 0.9204635204081633,
+    "downscale_0.5x": 0.9514695153061223,
+    "downscale_0.25x": 0.8663294642857142,
+    "blur_r1.5": 0.9441470663265306
+  }
+}

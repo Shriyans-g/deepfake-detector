@@ -1,0 +1,85 @@
+{
+  "checkpoint": "/content/drive/MyDrive/deepfake/checkpoints/A_celebdf.pth",
+  "arch": "resnet50",
+  "temperature": 1.5521428479186605,
+  "frame": {
+    "auc": 0.6244466836734694,
+    "accuracy": 0.27685714285714286,
+    "precision_fake": 0.9606164383561644,
+    "recall_fake": 0.10017857142857142,
+    "f1_fake": 0.1814359637774903,
+    "confusion_matrix": [
+      [
+        1377,
+        23
+      ],
+      [
+        5039,
+        561
+      ]
+    ],
+    "n": 7000
+  },
+  "video": {
+    "auc": 0.6328826530612245,
+    "accuracy": 0.26,
+    "precision_fake": 0.9565217391304348,
+    "recall_fake": 0.07857142857142857,
+    "f1_fake": 0.14521452145214522,
+    "confusion_matrix": [
+      [
+        138,
+        2
+      ],
+      [
+        516,
+        44
+      ]
+    ],
+    "n": 700
+  },
+  "breakdown": {
+    "by_dataset": {
+      "FF++": {
+        "frame_auc": 0.6244466836734694,
+        "video_auc": 0.6328826530612245,
+        "n_frames": 7000
+      }
+    },
+    "by_method": {
+      "FFpp-Deepfakes": {
+        "frame_auc": 0.796925,
+        "video_auc": 0.822295918367347,
+        "n_frames": 2800
+      },
+      "FFpp-Face2Face": {
+        "frame_auc": 0.654459693877551,
+        "video_auc": 0.6571428571428571,
+        "n_frames": 2800
+      },
+      "FFpp-FaceSwap": {
+        "frame_auc": 0.4568515306122449,
+        "video_auc": 0.4574489795918368,
+        "n_frames": 2800
+      },
+      "FFpp-NeuralTextures": {
+        "frame_auc": 0.5895505102040817,
+        "video_auc": 0.594642857142857,
+        "n_frames": 2800
+      }
+    }
+  },
+  "calibration": {
+    "ece_raw": 0.7042768480237189,
+    "ece_temperature_scaled": 0.69141490580565
+  },
+  "robustness_frame_auc": {
+    "clean": 0.6244466836734694,
+    "jpeg_q70": 0.624555612244898,
+    "jpeg_q50": 0.62130625,
+    "jpeg_q30": 0.6092873086734694,
+    "downscale_0.5x": 0.5963954719387755,
+    "downscale_0.25x": 0.5737533801020408,
+    "blur_r1.5": 0.5849108418367347
+  }
+}
