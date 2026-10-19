@@ -1,0 +1,39 @@
+# Run the whole app (API + frontend) with one command:
+#   docker compose up --build
+# Needs model/checkpoints/best.pth, or MODEL_URL pointing at a download of it.
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      ALLOWED_ORIGINS: http://localhost:3000
+      # Optional. If best.pth is missing, the API downloads it from here.
+      # Set it in your shell or in a .env file next to this one.
+      MODEL_URL: ${MODEL_URL:-}
+    volumes:
+      # The checkpoint stays on your machine instead of being baked into the image.
+      # Not read-only, so a MODEL_URL download is saved here and reused next time.
+      - ./model/checkpoints:/app/model/checkpoints
+    healthcheck:
+      # Healthy only once the model is loaded (not just when the server answers),
+      # so a missing checkpoint fails here instead of on every upload.
+      test: ["CMD", "python", "-c", "import json, sys, urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:8000/health'))['model_loaded'] else 1)"]
+      start_period: 60s
+      start_interval: 2s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # The browser on your machine calls the API, so this is the host address.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy

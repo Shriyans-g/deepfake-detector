@@ -7,6 +7,8 @@ reports/
 notebooks/
 frontend/
 tests/
+# Checkpoints are mounted or downloaded (MODEL_URL) at run time, not baked in.
+model/checkpoints/*
 **/__pycache__
 *.py[cod]
 .DS_Store

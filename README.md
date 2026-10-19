@@ -12,6 +12,24 @@ Detects deepfake face manipulations in images. Upload a photo with a face and ge
 
 <!-- Add a demo GIF here once it's deployed: ![demo](reports/demo.gif) -->
 
+## Quick start (Docker)
+
+Runs the API and the web app together with one command. No Python or Node setup needed.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it.
+2. Get the trained model. The checkpoint isn't in git, so either put `best.pth` in `model/checkpoints/`, or set `MODEL_URL` to a download link for it (e.g. a GitHub Release asset) and the API fetches it on first start.
+3. From the repo folder:
+
+   ```bash
+   docker compose up            # add --build after changing code
+   # or, with MODEL_URL:
+   MODEL_URL=https://.../best.pth docker compose up
+   ```
+
+4. Open http://localhost:3000. The API is at http://localhost:8000 (docs at `/docs`).
+
+The web app starts once the API reports the model is loaded. Stop everything with `Ctrl+C`, or `docker compose down` if you started it with `-d`.
+
 ## Results
 
 All numbers are on the datasets' official test splits (Celeb-DF v2: 518 videos; FF++ c23: 140 source videos x 5 = 700 videos). ResNet50, 6 epochs, trained on a Colab T4. Raw numbers are in `reports/*/metrics.json`.
@@ -127,7 +145,9 @@ Grad-CAM, implemented from scratch with forward hooks: weight the last conv bloc
 
 Errors: `415` wrong file type, `413` too large, `400` unreadable, `422` no face found, `503` no model loaded.
 
-## Running it
+## Development setup
+
+For working on the code, training, or running without Docker.
 
 ### 1. Setup
 
@@ -174,7 +194,7 @@ cd frontend && cp .env.example .env.local && npm install && npm run dev   # http
 pytest -q
 ```
 
-Tests build a small random-weight checkpoint, so they run without the real model or dataset. CI runs them, builds the Docker image, and builds the frontend on every push.
+Tests build a small random-weight checkpoint, so they run without the real model or dataset. CI runs them, builds the frontend, and builds both Docker images on every push.
 
 ## Deployment
 

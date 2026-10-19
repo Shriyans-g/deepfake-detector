@@ -1,0 +1,8 @@
+# Rebuilt inside the image; copying the local ones would be slow and could
+# bring in macOS-only binaries.
+node_modules
+.next
+# Local settings would override the NEXT_PUBLIC_API_URL build arg.
+.env*.local
+Dockerfile
+.dockerignore

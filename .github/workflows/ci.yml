@@ -26,8 +26,8 @@ jobs:
     needs: backend
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t deepfake-detector .
+      - name: Build API and web images (from docker-compose.yml)
+        run: docker compose build
 
   frontend:
     runs-on: ubuntu-latest
