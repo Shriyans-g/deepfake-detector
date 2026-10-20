@@ -84,12 +84,19 @@ class FaceDetector:
         return FaceBox(int(x), int(y), int(bw), int(bh), float(best[-1]), landmarks, len(faces))
 
 
-def crop_square(box: FaceBox, margin: float = CROP_MARGIN) -> tuple[int, int, int]:
-    """The square crop region around a face: (x0, y0, side) in image pixels."""
+def crop_square(box: FaceBox, margin: float = CROP_MARGIN) -> tuple[int, int, int, int]:
+    """The crop region around a face: (x0, y0, x1, y1) in image pixels.
+
+    Each edge is rounded on its own, exactly as when the training crops were
+    built, so the region can be 1px wider than tall (or vice versa). Don't
+    change the rounding: training and inference crops must match exactly.
+    """
 
     cx, cy = box.x + box.w / 2, box.y + box.h / 2
     side = max(box.w, box.h) * margin
-    return int(round(cx - side / 2)), int(round(cy - side / 2)), int(round(side))
+    x0, y0 = int(round(cx - side / 2)), int(round(cy - side / 2))
+    x1, y1 = int(round(cx + side / 2)), int(round(cy + side / 2))
+    return x0, y0, x1, y1
 
 
 def crop_face(
@@ -101,8 +108,7 @@ def crop_face(
     """Cut a square crop around the face box and resize it to size x size."""
 
     img_h, img_w = image_bgr.shape[:2]
-    x0, y0, side = crop_square(box, margin)
-    x1, y1 = x0 + side, y0 + side
+    x0, y0, x1, y1 = crop_square(box, margin)
 
     # Pad with black if the square runs off the edge, instead of shifting it.
     # Shifting would move the face off-center differently near borders.

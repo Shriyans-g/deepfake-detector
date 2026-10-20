@@ -22,9 +22,10 @@ REGIONS = ("eyes", "nose", "mouth", "rest_of_face", "outside_face")
 def _to_crop_coords(points: list[tuple[float, float]], box: FaceBox, size: int) -> np.ndarray:
     """Map image-pixel points into the size x size face crop."""
 
-    x0, y0, side = crop_square(box, CROP_MARGIN)
+    x0, y0, x1, y1 = crop_square(box, CROP_MARGIN)
     pts = np.array(points, dtype=np.float64)
-    return (pts - [x0, y0]) * (size / side)
+    # Width and height can differ by 1px (see crop_square), so scale each axis.
+    return (pts - [x0, y0]) * [size / (x1 - x0), size / (y1 - y0)]
 
 
 def region_masks(box: FaceBox, size: int) -> dict[str, np.ndarray]:
@@ -90,9 +91,14 @@ def sharpness(crop_bgr: np.ndarray) -> float:
 
 # Thresholds are rough heuristics; the notes say "may", not "does".
 SMALL_FACE_PX = 100
-# Calibrated on our training crops (from compressed video): their median is ~24 and
-# the 5th percentile ~15, while a 1.5px Gaussian blur drops a typical crop to ~3.
-BLUR_THRESHOLD = 8.0
+# Measured with sharpness() on every train crop (Oct 2026):
+#   Celeb-DF (47,027 crops): median 17.1, 1st percentile 6.09, min 4.0
+#   FF++     (35,999 crops): median 80.4, 1st percentile 16.3, min 7.4
+# Set just below the lower 1st percentile, so only uploads blurrier than about
+# 99% of what the model trained on are flagged (0.9% of Celeb-DF train crops,
+# none of FF++). A typical crop needs a Gaussian blur of sigma ~1.5-2 to drop
+# below it, so mild blur deliberately goes unflagged.
+BLUR_THRESHOLD = 6.0
 WEAK_DETECTION = 0.85
 
 

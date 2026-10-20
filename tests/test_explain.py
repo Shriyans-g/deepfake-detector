@@ -1,7 +1,7 @@
 import numpy as np
 
 from model.explain import REGIONS, attention_by_region, quality_notes, region_masks
-from model.faces import FaceBox
+from model.faces import FaceBox, crop_square
 
 
 def face_with_landmarks() -> FaceBox:
@@ -54,3 +54,10 @@ def test_quality_notes_empty_for_a_clean_upload():
     detailed_crop = rng.integers(0, 255, (256, 256, 3), dtype=np.uint8)
     report = quality_notes(FaceBox(0, 0, 300, 320, 0.99), detailed_crop)
     assert report["notes"] == []
+
+
+def test_crop_square_rounds_each_edge_like_the_training_crops():
+    # side = 97 * 1.3 = 126.1 around center 58.5. Rounding each edge gives
+    # -5..122, as when data/faces was built. Rounding the side first would
+    # give -5..121, a 1px different crop from the training data.
+    assert crop_square(FaceBox(10, 10, 97, 97, 0.9)) == (-5, -5, 122, 122)
