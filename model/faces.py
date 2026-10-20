@@ -11,7 +11,7 @@ on a Mac, in Colab, and inside the Docker image.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -36,6 +36,11 @@ class FaceBox:
     w: int
     h: int
     score: float
+    # Five landmarks from YuNet, in image pixels: right eye, left eye, nose tip,
+    # right mouth corner, left mouth corner (from the person's point of view).
+    landmarks: list[tuple[float, float]] = field(default_factory=list)
+    # How many faces the detector found in the whole image (this is the largest).
+    faces_in_image: int = 1
 
     def as_dict(self) -> dict:
         return {"x": self.x, "y": self.y, "w": self.w, "h": self.h, "score": round(self.score, 4)}
@@ -74,7 +79,17 @@ class FaceDetector:
         # Each row: x, y, w, h, 10 landmark coords, score.
         best = max(faces, key=lambda f: f[2] * f[3])
         x, y, bw, bh = (best[:4] / scale).tolist()
-        return FaceBox(int(x), int(y), int(bw), int(bh), float(best[-1]))
+        points = (best[4:14] / scale).reshape(5, 2)
+        landmarks = [(float(px), float(py)) for px, py in points]
+        return FaceBox(int(x), int(y), int(bw), int(bh), float(best[-1]), landmarks, len(faces))
+
+
+def crop_square(box: FaceBox, margin: float = CROP_MARGIN) -> tuple[int, int, int]:
+    """The square crop region around a face: (x0, y0, side) in image pixels."""
+
+    cx, cy = box.x + box.w / 2, box.y + box.h / 2
+    side = max(box.w, box.h) * margin
+    return int(round(cx - side / 2)), int(round(cy - side / 2)), int(round(side))
 
 
 def crop_face(
@@ -86,11 +101,8 @@ def crop_face(
     """Cut a square crop around the face box and resize it to size x size."""
 
     img_h, img_w = image_bgr.shape[:2]
-    cx, cy = box.x + box.w / 2, box.y + box.h / 2
-    side = max(box.w, box.h) * margin
-
-    x0, y0 = int(round(cx - side / 2)), int(round(cy - side / 2))
-    x1, y1 = int(round(cx + side / 2)), int(round(cy + side / 2))
+    x0, y0, side = crop_square(box, margin)
+    x1, y1 = x0 + side, y0 + side
 
     # Pad with black if the square runs off the edge, instead of shifting it.
     # Shifting would move the face off-center differently near borders.

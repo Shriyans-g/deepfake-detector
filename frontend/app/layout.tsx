@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Deepfake Detector",
-  description: "Face-swap detection with calibrated confidence and Grad-CAM explanations.",
+  description: "Check whether a face in a photo was manipulated, with a calibrated score and a heatmap of the evidence.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

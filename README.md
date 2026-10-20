@@ -121,6 +121,11 @@ Neural nets are usually overconfident: a raw "99%" can be right much less often 
 
 Grad-CAM, implemented from scratch with forward hooks: weight the last conv block's feature maps by the gradient of the output, sum them, ReLU, upsample. The heatmap shows evidence for whichever answer the model gave.
 
+### Evidence and reliability (`model/explain.py`)
+
+- **Where the model looked:** the Grad-CAM heatmap is split into face regions built from the detector's five landmarks (eyes, nose, mouth, rest of the face, outside the face), and the API reports the share of the heatmap in each.
+- **How much to trust it:** the API flags uploads that the robustness tests showed are harder: small faces, blur (Laplacian variance below what the training crops have), a low-confidence face detection, or several faces in one photo.
+
 ### API (`app/`)
 
 | Endpoint | Description |
@@ -138,6 +143,8 @@ Grad-CAM, implemented from scratch with forward hooks: weight the last conv bloc
   "face_crop": "data:image/png;base64,...",
   "heatmap": "data:image/png;base64,...",
   "heatmap_explains": "fake",
+  "attention": [{ "region": "mouth", "share": 0.41 }, { "region": "rest_of_face", "share": 0.27 }, "..."],
+  "quality": { "face_px": 212, "sharpness": 31.4, "detector_confidence": 0.97, "faces_in_image": 1, "notes": [] },
   "model": { "arch": "resnet50", "temperature": 1.8 },
   "latency_ms": 412.0
 }

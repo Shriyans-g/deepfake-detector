@@ -28,6 +28,9 @@ over clever code, and explain non-obvious changes when you make them.
   in non-headless opencv, which breaks the slim Docker image).
 - **RAG/ChromaDB/Ollama were removed.** The old version retrieved canned text based on only the
   label and confidence, so the LLM never saw the image and added no real information.
+- **Explanations are measured, not generated.** `model/explain.py` turns the Grad-CAM heatmap into per-region shares
+  (landmark-based masks) and adds quality notes tied to our robustness results. The frontend's benchmark numbers
+  live in `frontend/app/benchmarks.ts` (copied from reports/*/metrics.json; update them if you retrain).
 - Runtime deps (`requirements.txt`) stay minimal for the Docker image. Training-only deps go in
   `requirements-train.txt`, test deps in `requirements-dev.txt`.
 

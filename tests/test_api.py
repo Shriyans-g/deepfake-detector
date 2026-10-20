@@ -72,6 +72,8 @@ def test_predict_with_face(monkeypatch):
     assert body["heatmap"].startswith("data:image/png;base64,")
     assert body["face_crop"].startswith("data:image/png;base64,")
     assert body["face_box"]["w"] == 160
+    assert abs(sum(r["share"] for r in body["attention"]) - 1) < 1e-3
+    assert {"face_px", "sharpness", "notes"} <= set(body["quality"])
     # Temperature 1.5 pulls the calibrated score toward 0.5 relative to raw.
     assert abs(body["prob_fake"] - 0.5) <= abs(body["raw_prob_fake"] - 0.5) + 1e-4
 

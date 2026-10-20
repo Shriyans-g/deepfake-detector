@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image
 
 from model.calibration import sigmoid
+from model.explain import attention_by_region, quality_notes
 from model.faces import FaceDetector, crop_face
 from model.gradcam import GradCAM, overlay_heatmap
 from model.model_utils import get_device, gradcam_target_layer, load_checkpoint
@@ -102,7 +103,8 @@ class DetectorService:
         if box is None:
             raise NoFaceFound("No face detected. This model only analyzes images containing a face.")
 
-        crop_rgb = cv2.cvtColor(crop_face(image_bgr, box), cv2.COLOR_BGR2RGB)
+        crop_bgr = crop_face(image_bgr, box)
+        crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
         tensor = self.transform(Image.fromarray(crop_rgb)).unsqueeze(0).to(self.device)
         temperature = float(self.meta["temperature"])
 
@@ -123,6 +125,8 @@ class DetectorService:
             "face_crop": to_data_url(display),
             "heatmap": to_data_url(overlay_heatmap(display, heatmap)),
             "heatmap_explains": "fake" if explains_fake else "real",
+            "attention": attention_by_region(heatmap, box),
+            "quality": quality_notes(box, crop_bgr),
             "model": self.model_info(),
             "latency_ms": round((time.perf_counter() - start) * 1000, 1),
         }
